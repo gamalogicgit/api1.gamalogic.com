@@ -7,7 +7,7 @@ class CompanyModel {
    */
   static async findByNameOrDomain(searchTerm) {
     const [rows] = await mySqlPool.query(
-      `SELECT id, company_name, domain, created_at, reference 
+      `SELECT id, company_name, domain, created_at, reference, url 
        FROM company_master 
        WHERE company_name = ? OR domain = ?`,
       [searchTerm, searchTerm]
@@ -17,14 +17,13 @@ class CompanyModel {
 
   /**
    * Save a new company
-   * reference stores where the data came from (clearout, brandfetch, tavily)
    */
   static async create(companyData) {
-    const { company_name, domain, reference } = companyData;
+    const { company_name, domain, reference, url } = companyData;
     const [result] = await mySqlPool.query(
-      `INSERT INTO company_master (company_name, domain, reference, created_at) 
-       VALUES (?, ?, ?, NOW())`,
-      [company_name, domain, reference]
+      `INSERT INTO company_master (company_name, domain, reference, url, created_at) 
+       VALUES (?, ?, ?, ?, NOW())`,
+      [company_name, domain, reference, url || null]
     );
     return result.insertId;
   }
@@ -33,12 +32,25 @@ class CompanyModel {
    * Update an existing company
    */
   static async update(id, companyData) {
-    const { domain, reference } = companyData;
+    const { domain, reference, url } = companyData;
     const [result] = await mySqlPool.query(
       `UPDATE company_master 
-       SET domain = ?, reference = ?
+       SET domain = ?, reference = ?, url = ?
        WHERE id = ?`,
-      [domain, reference, id]
+      [domain, reference, url || null, id]
+    );
+    return result.affectedRows;
+  }
+
+  /**
+   * ✅ Update the url column (used for both logo and favicon paths)
+   */
+  static async updateUrl(companyName, urlValue) {
+    const [result] = await mySqlPool.query(
+      `UPDATE company_master 
+       SET url = ?
+       WHERE company_name = ?`,
+      [urlValue, companyName]
     );
     return result.affectedRows;
   }
@@ -48,7 +60,7 @@ class CompanyModel {
    */
   static async getAll(limit = 100, offset = 0) {
     const [rows] = await mySqlPool.query(
-      `SELECT id, company_name, domain, created_at, reference 
+      `SELECT id, company_name, domain, created_at, reference, url 
        FROM company_master 
        ORDER BY created_at DESC 
        LIMIT ? OFFSET ?`,

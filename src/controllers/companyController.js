@@ -5,6 +5,7 @@ import {
   fetchFromClearout
 } from '../helpers/searchHelpers.js';
 import CompanyModel from '../models/companyModel.js';
+import { fetchLogo, saveLogoLocally } from '../helpers/logoFetchHelper.js';
 
 class CompanyController {
   /**
@@ -203,6 +204,110 @@ class CompanyController {
       });
     } catch (error) {
       console.error('❌ Error in getById:', error);
+      next(error);
+    }
+  }
+
+
+    /**
+   * Get company logo
+   * GET /v1/company/logo?name={company_name}&type=logo|favicon
+   */
+  async getLogo(req, res, next) {
+    try {
+      const companyName = req.query.name;
+      const type = req.query.type === 'favicon' ? 'favicon' : 'logo';
+
+      if (!companyName) {
+        return res.status(400).json({
+          success: false,
+          error: 'Company name is required. Provide "name" as a query parameter.',
+          example: 'GET /v1/company/logo?name=google'
+        });
+      }
+
+      const cleanName = companyName.trim();
+
+      // 1. Get the company from database
+      const dbResults = await CompanyModel.findByNameOrDomain(cleanName);
+      console.log('🔍 Database search for company:', cleanName, 'Results:', dbResults);
+      if (!dbResults || dbResults.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: 'Company not found. Please resolve the company first.',
+          hint: `Try: GET /v1/company/resolve?name=${encodeURIComponent(cleanName)}`
+        });
+      }
+
+      const company = dbResults[0];
+      const domain = company.domain;
+
+      // 2. ✅ Check if URL is already saved in DB
+      if (company.url) {
+        console.log('📦 URL found in database:', company.url);
+        return res.json({
+          success: true,
+          // fromDatabase: true,
+          data: {
+            company_name: cleanName,
+            domain: domain,
+            // type: type,
+            url: company.url,
+            // full_url: `${req.protocol}://${req.get('host')}/${company.url}`
+          }
+        });
+      }
+
+      console.log(`🎨 URL not in DB. Fetching ${type} for ${domain}...`);
+
+      // 3. Fetch the logo URL using the fallback chain
+      const logoResult = await fetchLogo(domain, type);
+
+      if (logoResult.error) {
+        return res.status(404).json({
+          success: false,
+          error: logoResult.error,
+          data: { company_name: cleanName, domain }
+        });
+      }
+
+      // 4. Save the image locally
+      const saveResult = await saveLogoLocally(cleanName, logoResult.logoUrl, type);
+
+      // 5. ✅ Save the local path to the DB `url` column
+      let savedPath = null;
+      if (saveResult.saved) {
+        savedPath = saveResult.path; // e.g., "images/logo/google.png"
+        
+        try {
+          await CompanyModel.updateUrl(cleanName, savedPath);
+          console.log(`💾 URL saved to DB: ${savedPath}`);
+        } catch (dbError) {
+          console.error('❌ Error saving URL to DB:', dbError.message);
+          // Continue anyway - the file is still saved locally
+        }
+      }
+
+      // 6. Return response
+      res.json({
+        success: true,
+        // fromDatabase: false,
+        data: {
+          company_name: cleanName,
+          domain: domain,
+          // type: type,
+          url: savedPath || logoResult.logoUrl,
+          // source: logoResult.source,
+          // saved: saveResult.saved,
+          // saved_path: savedPath,
+          // full_url: savedPath 
+          //   ? `${req.protocol}://${req.get('host')}/${savedPath}` 
+          //   : null
+        }
+      });
+
+    } catch (error) {
+      console.error('❌ Error in getLogo:', error);
       next(error);
     }
   }

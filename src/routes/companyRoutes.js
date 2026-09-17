@@ -7,5 +7,6 @@ const router = express.Router();
 router.get('/resolve', companyController.resolve);
 // router.get('/all', companyController.getAll);
 // router.get('/:id', companyController.getById);
+router.get('/logo', companyController.getLogo);
 
 export default router;

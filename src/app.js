@@ -5,11 +5,16 @@ import cookieParser from "cookie-parser";
 import cors from "cors";
 import morgan from "morgan";
 import helmet from "helmet";
+import path from "path";                          
+import { fileURLToPath } from "url";
 
 import companyRoutes from "./routes/companyRoutes.js";
 import errorHandler from "./middleware/errorHandler.js";
 
 dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 
@@ -43,7 +48,10 @@ app.get('/health', (req, res) => {
 });
 
 // API Routes
+app.use('/images', express.static(path.join(__dirname, '..', 'images')));
+
 app.use('/v1/company', companyRoutes);
+
 
 // 404 handler
 app.use((req, res) => {
